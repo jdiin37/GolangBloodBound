@@ -1,10 +1,12 @@
 package gameAction
 
 import (
-	"../model"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"time"
+
+	"../model"
 )
 
 type action interface {
@@ -17,11 +19,24 @@ type TheGame struct {
 	Game *model.Game
 }
 
-func checkGameIsOver() {
-
+func CheckGameIsOver(theGame *TheGame) string {
+	for _, playerStatus := range theGame.Game.AllPlayerStatus {
+		if playerStatus.BeKill {
+			if playerStatus.Role == theGame.Game.RedLeader { //殺到老大 自己陣營獲勝
+				return "blue"
+			} else if playerStatus.Role == theGame.Game.BlueLeader { //殺到老大 自己陣營獲勝
+				return "red"
+			} else if playerStatus.Role.Color == "red" { //沒殺到老大 對方陣營獲勝
+				return "red"
+			} else if playerStatus.Role.Color == "blue" { //沒殺到老大 對方陣營獲勝
+				return "blue"
+			}
+		}
+	}
+	return ""
 }
 
-func RandomCreateRole(playerCnt int) []model.Role {
+func randomCreateRole(playerCnt int) []model.Role {
 	rand.Seed(time.Now().UnixNano())
 	allRoleDeck := model.AllRoleDeck()
 	redDeck := allRoleDeck.RedRole
@@ -80,6 +95,7 @@ func RandomCreateRole(playerCnt int) []model.Role {
 	return randomAllRole
 }
 
+//CreateGame 建立一場遊戲
 func CreateGame(allPlayers []model.Player) *TheGame {
 	if len(allPlayers) != 6 && len(allPlayers) != 8 {
 		fmt.Println("人數不足必須為6或8人", len(allPlayers))
@@ -88,8 +104,25 @@ func CreateGame(allPlayers []model.Player) *TheGame {
 
 	game := &model.Game{}
 	game.PlayerCount = len(allPlayers)
+	game.RedLeader = model.Role{
+		Rank: 9,
+	}
+	game.BlueLeader = model.Role{
+		Rank: 9,
+	}
 
-	randomAllRole := RandomCreateRole(game.PlayerCount)
+	randomAllRole := randomCreateRole(game.PlayerCount)
+	for _, role := range randomAllRole {
+		if role.Color == "red" {
+			if game.RedLeader.Rank > role.Rank { //rank最小的才是老大
+				game.RedLeader = role
+			}
+		} else if role.Color == "blue" {
+			if game.BlueLeader.Rank > role.Rank { //rank最小的才是老大
+				game.BlueLeader = role
+			}
+		}
+	}
 
 	allPlayerStatus := []model.PlayerStatus{}
 	for i, player := range allPlayers {
@@ -98,7 +131,7 @@ func CreateGame(allPlayers []model.Player) *TheGame {
 			FirstBloodType:   "",
 			SeconedBloodType: "",
 			ShowRank:         "",
-			Role:randomAllRole[i],
+			Role:             randomAllRole[i],
 		}
 		allPlayerStatus = append(allPlayerStatus, playerStatus)
 	}
@@ -110,7 +143,35 @@ func CreateGame(allPlayers []model.Player) *TheGame {
 	}
 }
 
-func (theGame *TheGame) fillPlayer(playerCount int) {
-	theGame.Game.PlayerCount = playerCount
+func RoundStart(theGame *TheGame, playerIndex int) int {
+	theGame.Game.RoundCount += 1
+	theGame.Game.AllPlayerStatus[playerIndex].ActionCount += 1
+	stabPlayerIndex := rand.Intn(theGame.Game.PlayerCount)
+
+	Stab(theGame, stabPlayerIndex)
+	round := model.Round{
+		ID:               0,
+		PlayerID:         theGame.Game.AllPlayerStatus[playerIndex].PlayerID,
+		StabPlayerID:     theGame.Game.AllPlayerStatus[stabPlayerIndex].PlayerID,
+		BlockingPlayerID: 0,
+	}
+
+	theGame.Game.AllRound = append(theGame.Game.AllRound, round)
+
+	fmt.Printf("Round %v  %+v\n", theGame.Game.RoundCount, theGame.Game.AllRound)
+
+	return stabPlayerIndex
+}
+
+func Stab(theGame *TheGame, beStabPlayerIndex int) {
+	if theGame.Game.AllPlayerStatus[beStabPlayerIndex].FirstBloodType == "" {
+		theGame.Game.AllPlayerStatus[beStabPlayerIndex].FirstBloodType = theGame.Game.AllPlayerStatus[beStabPlayerIndex].Role.FirstBlood
+	} else if theGame.Game.AllPlayerStatus[beStabPlayerIndex].SeconedBloodType == "" {
+		theGame.Game.AllPlayerStatus[beStabPlayerIndex].SeconedBloodType = theGame.Game.AllPlayerStatus[beStabPlayerIndex].Role.SecondBlood
+	} else if theGame.Game.AllPlayerStatus[beStabPlayerIndex].ShowRank == "" {
+		theGame.Game.AllPlayerStatus[beStabPlayerIndex].ShowRank = strconv.Itoa(theGame.Game.AllPlayerStatus[beStabPlayerIndex].Role.Rank)
+	} else {
+		theGame.Game.AllPlayerStatus[beStabPlayerIndex].BeKill = true
+	}
 
 }
